@@ -11,8 +11,888 @@
        iske liye hum http post aur get method ka use karte hai
 
 
-        
+// EX-1 this code is working fine. this is my intellisite project. which can store the ipaddress, read the current ip address, change the new ip address
+/*
+#include <SPI.h>
+#include <EthernetENC.h>
+#include <EEPROM.h>
 
+#define relayPin 4
+
+byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xCE};
+IPAddress ip(192, 168, 1, 153);
+
+unsigned long previousMillis = 0;
+const long interval = 3000;
+
+#define EEPROM_SIZE 4
+
+EthernetServer server(6000);
+bool clientConnected = false;
+EthernetClient client;
+
+void writeIPAddressToEEPROM(int startAddress, IPAddress ipAddr) {
+  for (int i = 0; i < 4; i++) {
+    EEPROM.write(startAddress + i, ipAddr[i]);
+  }
+  EEPROM.commit();
+  delay(10);
+}
+
+IPAddress readIPAddressFromEEPROM(int startAddress) {
+  byte ipBytes[4];
+  for (int i = 0; i < 4; i++) {
+    ipBytes[i] = EEPROM.read(startAddress + i);
+  }
+  return IPAddress(ipBytes);
+}
+
+void clearStoredIPFromEEPROM() {
+  for (int i = 0; i < 4; ++i) {
+    EEPROM.write(i, 0);
+  }
+  EEPROM.commit();
+  delay(10);
+}
+
+void setup() {
+  Ethernet.init(5); 
+  Ethernet.begin(mac, ip);
+  Serial.begin(9600);
+
+  pinMode(relayPin, OUTPUT);
+  digitalWrite(relayPin, HIGH);
+  while (!Serial);
+
+  Serial.println("Initialize Ethernet with Static IP:");
+
+  EEPROM.begin(EEPROM_SIZE);
+
+  writeIPAddressToEEPROM(0, ip);
+
+  server.begin();
+
+  Serial.print("Static IP: ");
+  Serial.println(Ethernet.localIP());
+}
+
+void loop() {
+  unsigned long currentMillis = millis();
+
+  // Handle client connection
+  if (!clientConnected) {
+    client = server.available();
+    if (client) {
+      Serial.println("New client connected");
+      clientConnected = true;
+    }
+  }
+
+  // Handle commands from the connected client
+  if (clientConnected && client.connected()) {
+    while (client.available()) {
+      String command = client.readStringUntil('%');
+      command.trim();
+
+      if (command == "HI") {
+        client.println("Connected");
+      } else if (command == "ENTRY") 
+      {
+        client.println("p4 pin Entry Gate is opened");
+        digitalWrite(relayPin, LOW);
+        delay(500);
+        digitalWrite(relayPin, HIGH);
+      } else if (command == "READIP") {
+        Serial.print("IP Address Requested: ");
+        IPAddress currentIP = Ethernet.localIP();
+        Serial.println(currentIP);
+        client.println(currentIP);
+      } else if (command.startsWith("WRITEIP:")) {
+        String newIPString = command.substring(8);
+        Serial.println("Received WRITEIP command with IP: " + newIPString);
+        IPAddress newIP;
+        if (newIP.fromString(newIPString)) {
+          writeIPAddressToEEPROM(0, newIP);
+          client.println("New IP address set: " + newIPString);
+          client.println("PLEASE DISCONNECT AND CONNECT WITH NEW IP");
+          client.println("PLEASE RESTART THE POWER");
+        } else {
+          client.println("Invalid IP address format.");
+        }
+      } else {
+        client.println("Unknown command");
+      }
+    }
+  } else {
+    clientConnected = false;
+  }
+  
+    // Send health packet every 3 seconds to the connected client
+  if (currentMillis - previousMillis >= interval) {
+    previousMillis = currentMillis;
+
+    if (clientConnected && client.connected()) {
+      client.println("|HLT%");
+    }
+  }
+
+  // Reconnect if necessary
+  if ((!client.connected()) && (Ethernet.linkStatus() == LinkOFF)) {
+    Serial.println("Attempting to reconnect...");
+    delay(1000);
+    client.stop();
+    server.begin();
+    ESP.restart();
+  }
+  // Add a delay to avoid excessive looping
+  delay(100);
+}
+*/
+//EXAMPLE-2 this code is working fine esp32 with ENC28j60 using preference library. this is also my intellisite project
+//EXAMPLE-1
+#include <SPI.h>
+#include <EthernetENC.h>
+#include <Preferences.h>
+
+#define relayPin 4
+
+byte mac[] =  { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
+//byte mac[] = { 0xDE, 0xDA, 0xBE, 0xEF, 0xFE, 0xEC };
+
+IPAddress defaultIp(192, 168, 1, 151);
+
+Preferences preferences;
+
+#define PREF_KEY_IP "StoredIP"
+EthernetServer server(6000);
+bool clientConnected = false;
+EthernetClient client;
+
+void writeIPAddressToPreferences(IPAddress ipAddr) {
+  preferences.begin("myApp", false);
+  preferences.putUInt(PREF_KEY_IP, ipAddr[0] | (ipAddr[1] << 8) | (ipAddr[2] << 16) | (ipAddr[3] << 24));
+  preferences.end();
+}
+
+IPAddress readIPAddressFromPreferences() {
+  preferences.begin("myApp", false);
+  uint32_t storedIP = preferences.getUInt(PREF_KEY_IP, 0);
+  preferences.end();
+  return IPAddress(storedIP);
+}
+
+void clearStoredIPFromPreferences() {
+  preferences.begin("myApp", false);
+  preferences.remove(PREF_KEY_IP);
+  preferences.end();
+}
+
+unsigned long previousMillis = 0;
+const long interval = 3000;
+
+void setup() {
+  Ethernet.init(5); 
+  Ethernet.begin(mac, defaultIp);
+  Serial.begin(9600);
+  pinMode(relayPin, OUTPUT);
+  digitalWrite(relayPin, HIGH);
+  while (!Serial);
+
+  Serial.println("Initialize Ethernet:");
+
+  // Read the stored IP address from preferences
+  IPAddress storedIP = readIPAddressFromPreferences();
+
+  // If a valid stored IP address is available, use it; otherwise, use the default IP
+  if (storedIP != IPAddress(0, 0, 0, 0)) {
+    Serial.println("Using stored IP address:");
+    Serial.println(storedIP);
+    Ethernet.begin(mac, storedIP);
+  } else {
+    Serial.println("Using default IP address:");
+    Serial.println(defaultIp);
+    Ethernet.begin(mac, defaultIp);
+    writeIPAddressToPreferences(defaultIp);
+  }
+
+  server.begin();
+
+  Serial.print("Static IP: ");
+  Serial.println(Ethernet.localIP());
+}
+
+void loop() {
+  unsigned long currentMillis = millis();
+
+  // Handle client connection
+  if (!clientConnected) {
+    client = server.available();
+    if (client) {
+      Serial.println("New client connected");
+      clientConnected = true;
+    }
+  }
+
+  // Handle commands from the connected client
+  if (clientConnected && client.connected()) {
+    while (client.available()) {
+      String command = client.readStringUntil('%');
+      command.trim();
+
+      if (command == "HI") {
+        client.println("Connected");
+      } else if (command == "ENTRY") {
+        client.println("p4 pin Entry Gate is opened");
+        digitalWrite(relayPin, LOW);
+        delay(500);
+        digitalWrite(relayPin, HIGH);
+      } else if (command == "READIP") {
+        Serial.print("IP Address Requested: ");
+        IPAddress currentIP = Ethernet.localIP();
+        Serial.println(currentIP);
+        client.println(currentIP);
+      } else if (command.startsWith("WRITEIP:")) {
+        String newIPString = command.substring(8);
+        Serial.println("Received WRITEIP command with IP: " + newIPString);
+        IPAddress newIP;
+        if (newIP.fromString(newIPString)) {
+          writeIPAddressToPreferences(newIP);
+          client.println("New IP address set: " + newIPString);
+          client.println("PLEASE DISCONNECT AND CONNECT WITH NEW IP");
+          client.println("PLEASE RESTART THE POWER");
+          // Ensure client is stopped
+          client.stop();
+          delay(1000); // Short delay to allow the client to properly close
+          
+          // Print the stored IP for verification
+          Serial.print("Stored IP Address: ");
+          Serial.println(readIPAddressFromPreferences());
+          ESP.restart();
+          // Reset ESP32 module
+          
+        } else {
+          client.println("Invalid IP address format.");
+        }
+      } else {
+        client.println("Unknown command");
+      }
+    }
+  } else {
+    clientConnected = false;
+  }
+
+  // Send health packet every 3 seconds to the connected client
+  if (currentMillis - previousMillis >= interval) {
+    previousMillis = currentMillis;
+
+    if (clientConnected && client.connected()) {
+      client.println("|HLT%");
+    }
+  }
+
+  // Reconnect if necessary
+  if ((!client.connected()) && (Ethernet.linkStatus() == LinkOFF)) {
+    Serial.println("Attempting to reconnect...");
+    delay(1000);
+    client.stop();
+    server.begin();
+    ESP.restart();
+  }
+}
+
+#fastag amritsar and udaipur project
+/*
+#include <SPI.h>
+#include <Ethernet.h>
+
+#define relayPin 8
+
+//ENTRY
+byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED};
+IPAddress ip(192, 168, 1, 241);
+
+//EXIT
+//byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xEC};
+//IPAddress ip(192, 168, 1, 241);
+
+EthernetServer server(6000);
+EthernetClient client;
+
+String clientData = "";
+
+boolean IsClientConnected = false;
+boolean IsClientAlive = false;
+
+unsigned long currentMillis, previousMillis, healthPacketMillis, reconnectMillis;
+const unsigned long healthPacketInterval = 3000; // 3 seconds
+const unsigned long reconnectInterval = 5000; // 5 seconds
+
+void setup() {
+  Ethernet.begin(mac, ip);
+  server.begin();
+  Serial.begin(9600);
+
+  while (!Serial) {
+    ; // wait for the serial port to connect, needed for native USB port only
+  }
+
+  Serial.print("Machine Gate IP: ");
+  Serial.println(Ethernet.localIP());
+
+  pinMode(relayPin, OUTPUT);
+  digitalWrite(relayPin, HIGH);
+
+  IsClientConnected = false;
+
+  currentMillis = 0;
+  previousMillis = 0;
+  healthPacketMillis = 0;
+  reconnectMillis = 0;
+}
+
+void loop() {
+  if (!IsClientConnected) {
+    EthernetClient newClient = server.available();
+    if (newClient) {
+      client = newClient;
+      IsClientConnected = true;
+      client.flush();
+      Serial.println("Client Connected");
+      client.println("Connected to Arduino");
+    }
+  }
+
+  if (IsClientConnected) {
+    if (client.available() > 0) {
+      char thisChar = client.read();
+      if (thisChar == '|') {
+        clientData = "";
+      } else if (thisChar == '%') {
+        Serial.println(clientData);
+        if (clientData.equals("ENTRY")) {
+          Serial.println("Barrier is opening");
+          digitalWrite(relayPin, LOW);
+          delay(500);
+          digitalWrite(relayPin, HIGH);
+          delay(500);
+        }
+      } else {
+        clientData += thisChar;
+      }
+    }
+
+    // Check and send the health packet every 3 seconds
+    currentMillis = millis();
+    if (currentMillis - previousMillis >= healthPacketInterval) {
+      previousMillis = currentMillis;
+      client.println("|HLT%");
+    }
+
+    // Check if the client is still connected and reconnect if necessary
+    if (!client.connected()) {
+      Serial.println("Client Disconnected");
+      IsClientConnected = false;
+    }
+  }
+
+}
+*/
+#include <SPI.h>
+#include <Ethernet.h>
+#include <avr/wdt.h>  // Include the watchdog timer library
+
+#define relayPin 8
+
+//ENTRY
+byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED};
+IPAddress ip(192, 168, 1, 116);
+
+//EXIT
+//byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xEC};
+//IPAddress ip(192, 168, 1, 241);
+
+EthernetServer server(6000);
+EthernetClient client;
+
+String clientData = "";
+
+boolean IsClientConnected = false;
+boolean IsClientAlive = false;
+
+unsigned long currentMillis, previousMillis, healthPacketMillis, reconnectMillis;
+const unsigned long healthPacketInterval = 3000; // 3 seconds
+const unsigned long reconnectInterval = 5000; // 5 seconds
+
+void setup() {
+  Ethernet.begin(mac, ip);
+  server.begin();
+  Serial.begin(9600);
+
+  while (!Serial) {
+    ; // wait for the serial port to connect, needed for native USB port only
+  }
+
+  Serial.print("Machine Gate IP: ");
+  Serial.println(Ethernet.localIP());
+
+  pinMode(relayPin, OUTPUT);
+  digitalWrite(relayPin, HIGH);
+
+  IsClientConnected = false;
+
+  currentMillis = 0;
+  previousMillis = 0;
+  healthPacketMillis = 0;
+  reconnectMillis = 0;
+}
+
+void loop() {
+  if (!IsClientConnected) {
+    EthernetClient newClient = server.available();
+    if (newClient) {
+      client = newClient;
+      IsClientConnected = true;
+      client.flush();
+      Serial.println("Client Connected");
+      client.println("Connected to Arduino");
+      wdt_disable();  // Disable the watchdog timer since the client is connected
+    }
+  }
+
+  if (IsClientConnected) {
+    if (client.available() > 0) {
+      char thisChar = client.read();
+      if (thisChar == '|') {
+        clientData = "";
+      } else if (thisChar == '%') {
+        Serial.println(clientData);
+        if (clientData.equals("ENTRY")) {
+          Serial.println("Barrier is opening");
+          digitalWrite(relayPin, LOW);
+          delay(500);
+          digitalWrite(relayPin, HIGH);
+          delay(500);
+        }
+      } else {
+        clientData += thisChar;
+      }
+    }
+
+    // Check and send the health packet every 3 seconds
+    currentMillis = millis();
+    if (currentMillis - previousMillis >= healthPacketInterval) {
+      previousMillis = currentMillis;
+      client.println("|HLT%");
+    }
+
+    // Check if the client is still connected and reconnect if necessary
+    if (!client.connected()) {
+      Serial.println("Client Disconnected");
+      IsClientConnected = false;
+      wdt_enable(WDTO_2S);  // Enable the watchdog timer to reset the Arduino in 2 seconds
+    }
+  }
+}
+
+
+#kota turnstile project with qr code
+#include <SPI.h>
+#include <EthernetENC.h>
+#include <HardwareSerial.h>
+
+#define relayPin 4
+HardwareSerial SerialPort(0);
+
+byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED};
+IPAddress ip(192, 168, 2, 88);
+
+EthernetServer server(6000);
+EthernetClient client;
+
+String clientData = "";
+String data = "";
+
+boolean IsClientConnected = false;
+
+unsigned long currentMillis, previousMillis, reconnectMillis;
+const unsigned long healthPacketInterval = 3000; // 3 seconds
+const unsigned long reconnectInterval = 5000;    // 5 seconds
+const unsigned long resetInterval = 60000;
+
+String remove_all_repeating_substrings(String input_value)
+{
+  int length = input_value.length();
+
+  for (int i = 1; i <= length / 2; i++)
+  {
+    String substr = input_value.substring(0, i);
+    int repeat_count = length / i;
+
+    String repeated = "";
+    for (int j = 0; j < repeat_count; j++)
+    {
+      repeated += substr;
+    }
+
+    if (repeated == input_value)
+    {
+      return substr;
+    }
+  }
+
+  return input_value;
+}
+
+String extractData(String inputString)
+{
+  if ((inputString.startsWith("QR") || inputString.startsWith("TG")) && inputString.endsWith("END"))
+  {
+    String extractedData = inputString.substring(2, inputString.length() - 3);
+    return extractedData;
+  }
+  else
+  {
+    return inputString;
+  }
+}
+
+bool isNumeric(String str)
+{
+  for (size_t i = 0; i < str.length(); i++)
+  {
+    if (!isDigit(str.charAt(i)))
+    {
+      return false;
+    }
+  }
+  return true;
+}
+
+void setup()
+{
+  Ethernet.init(5); 
+  Serial.begin(115200);
+  SerialPort.begin(115200,SERIAL_8N1,3,1);
+  Ethernet.begin(mac, ip);
+  server.begin();
+  while (!Serial)
+  {
+    ; // wait for Serial port to connect
+  }
+
+  Serial.print("Machine Gate IP: ");
+  Serial.println(ip);
+
+  Ethernet.begin(mac, ip);
+  server.begin();
+
+  pinMode(relayPin, OUTPUT);
+  digitalWrite(relayPin, HIGH);
+  
+  IsClientConnected = false;
+
+  currentMillis = 0;
+  previousMillis = 0;
+  reconnectMillis = 0;
+}
+
+void loop()
+{
+  if (!IsClientConnected)
+  {
+    if (!client.connected())
+    {
+      client.stop(); // Ensure client is disconnected
+    }
+
+    EthernetClient newClient = server.available();
+    if (newClient)
+    {
+      client = newClient;
+      IsClientConnected = true;
+      client.flush();
+      Serial.println("Client Connected");
+      client.println("Connected to ESP32");
+    }
+  }
+
+  if (IsClientConnected)
+  {
+    if (client.available() > 0)
+    {
+      char thisChar = client.read();
+      if (thisChar == '|')
+      {
+        clientData = "";
+      }
+      else if (thisChar == '%')
+      {
+        Serial.println(clientData);
+        if (clientData.equals("OPENEN"))
+        {
+          Serial.println("Barrier is opening");
+          client.println("Barrier is opening");
+          digitalWrite(relayPin, LOW);
+          delay(300);
+          digitalWrite(relayPin, HIGH);
+        }
+      }
+      else
+      {
+        clientData += thisChar;
+      }
+    }
+
+   if(SerialPort.available())
+    {
+      data = SerialPort.readString();
+      Serial.println(data);
+      String result = remove_all_repeating_substrings(data);
+      String entryData = extractData(result);
+
+      if (isNumeric(entryData))
+      {
+        String sendTagData = "|ENTG-" + entryData + "%";
+        client.println(sendTagData);
+        Serial.println(sendTagData);
+      }
+      else
+      {
+        String sendEntryQRData = "|ENQR-" + entryData + "%";
+        client.println(sendEntryQRData);
+        Serial.println(sendEntryQRData);
+      }
+    }
+
+    currentMillis = millis();
+    if (currentMillis - previousMillis >= healthPacketInterval)
+    {
+      previousMillis = currentMillis;
+      client.println("|HLT%");
+    }
+
+    if (!client.connected())
+    {
+      Serial.println("Client Disconnected");
+      IsClientConnected = false;
+      reconnectMillis = millis();
+      if (millis() - reconnectMillis >= resetInterval)
+      {
+        Serial.println("Resetting...");
+        ESP.restart(); // Reset ESP32
+      }
+    }
+
+    if ((!client.connected()) && (Ethernet.linkStatus() == LinkOFF))
+    {
+      Serial.println("Attempting to reconnect...");
+      delay(100);
+      server.begin();
+    }
+  }
+}
+
+
+/*
+ ye same code jo hai mere esp32 based qr scanner ke liye hai
+#include <Arduino.h>
+#include <SPI.h>
+#include <EthernetLarge.h>
+#include <HardwareSerial.h>
+#include "esp_task_wdt.h"
+
+#define relayPin 13
+HardwareSerial SerialPort(2);
+
+byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED};
+IPAddress ip(192, 168, 1, 151);
+
+EthernetServer server(7000);
+EthernetClient client;
+
+String clientData = "";
+String data = "";
+
+boolean IsClientConnected = false;
+
+unsigned long currentMillis, previousMillis, reconnectMillis;
+const unsigned long healthPacketInterval = 3000; // 3 seconds
+const unsigned long reconnectInterval = 5000;    // 5 seconds
+const unsigned long resetInterval = 60000;
+
+String remove_all_repeating_substrings(String input_value)
+{
+  int length = input_value.length();
+
+  for (int i = 1; i <= length / 2; i++)
+  {
+    String substr = input_value.substring(0, i);
+    int repeat_count = length / i;
+
+    String repeated = "";
+    for (int j = 0; j < repeat_count; j++)
+    {
+      repeated += substr;
+    }
+
+    if (repeated == input_value)
+    {
+      return substr;
+    }
+  }
+
+  return input_value;
+}
+
+String extractData(String inputString)
+{
+  if ((inputString.startsWith("QR") || inputString.startsWith("TG")) && inputString.endsWith("END"))
+  {
+    String extractedData = inputString.substring(2, inputString.length() - 3);
+    return extractedData;
+  }
+  else
+  {
+    return inputString;
+  }
+}
+
+bool isNumeric(String str)
+{
+  for (size_t i = 0; i < str.length(); i++)
+  {
+    if (!isDigit(str.charAt(i)))
+    {
+      return false;
+    }
+  }
+  return true;
+}
+
+void setup()
+{
+  Ethernet.init(5); 
+  esp_task_wdt_init(4, true);
+  Serial.begin(115200);
+  SerialPort.begin(115200,SERIAL_8N1,16,17);
+  Ethernet.begin(mac, ip);
+  server.begin();
+  while (!Serial)
+  {
+    ; // wait for Serial port to connect
+  }
+
+  Serial.print("Machine Gate IP: ");
+  Serial.println(ip);
+
+  Ethernet.begin(mac, ip);
+  server.begin();
+
+  pinMode(relayPin, OUTPUT);
+  digitalWrite(relayPin, HIGH);
+  
+  IsClientConnected = false;
+
+  currentMillis = 0;
+  previousMillis = 0;
+  reconnectMillis = 0;
+}
+
+void loop()
+{
+  esp_task_wdt_reset();
+
+  if (!IsClientConnected)
+  {
+    if (!client.connected())
+    {
+      client.stop(); // Ensure client is disconnected
+    }
+
+    EthernetClient newClient = server.available();
+    if (newClient)
+    {
+      client = newClient;
+      IsClientConnected = true;
+      client.flush();
+      Serial.println("Client Connected");
+      client.println("Connected to ESP32");
+    }
+  }
+
+  if (IsClientConnected)
+  {
+    if (client.available() > 0)
+    {
+      char thisChar = client.read();
+      if (thisChar == '|')
+      {
+        clientData = "";
+      }
+      else if (thisChar == '%')
+      {
+        Serial.println(clientData);
+        if (clientData.equals("OPENEN"))
+        {
+          Serial.println("Barrier is opening");
+          digitalWrite(relayPin, LOW);
+          delay(300);
+          digitalWrite(relayPin, HIGH);
+        }
+      }
+      else
+      {
+        clientData += thisChar;
+      }
+    }
+
+   if(SerialPort.available())
+    {
+      data = SerialPort.readString();
+      Serial.println(data);
+      String result = remove_all_repeating_substrings(data);
+      String entryData = extractData(result);
+
+      if (isNumeric(entryData))
+      {
+        String sendTagData = "|ENTG-" + entryData + "%";
+        client.println(sendTagData);
+        Serial.println(sendTagData);
+      }
+      else
+      {
+        String sendEntryQRData = "|ENQR-" + entryData + "%";
+        client.println(sendEntryQRData);
+        Serial.println(sendEntryQRData);
+      }
+    }
+
+    currentMillis = millis();
+    if (currentMillis - previousMillis >= healthPacketInterval)
+    {
+      previousMillis = currentMillis;
+      client.println("|HLT%");
+    }
+
+    if (!client.connected())
+    {
+      Serial.println("Client Disconnected");
+      IsClientConnected = false;
+      reconnectMillis = millis();
+    }
+
+    if ((!client.connected()) && (Ethernet.linkStatus() == LinkOFF))
+    {
+      Serial.println("Attempting to reconnect...");
+      delay(100);
+      esp_task_wdt_init(15, true);
+      server.begin();
+    }
+  }
+}
+*/
+
+#kota turnstile project using raspberry pi
 
 
 
