@@ -10,8 +10,7 @@
        webpage jaise php and react ke sath share karna hai means man lo mai chahta hu ki arduino se jo mai data send karu temperature aur humidity ka wo php receive kare aur database me store kar de yaa data ko receive kare database ke sath match kare aur phir arduino ko command send kar de 
        iske liye hum http post aur get method ka use karte hai
 
-#step-2 http protocol get and post.(like mullanpur stadium project)
-        is project me hum 
+
         
 
 
