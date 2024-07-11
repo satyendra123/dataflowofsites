@@ -1,0 +1,27 @@
+#Step-1 TCP/IP connection
+        ek chiz yad rakho ki agar arduino aur raspberry pi ka kaam kewal gate open karne ka hai to hum tcp/ip ke through krenge. jaise kota wale project me kya hota hai ki man lo 50 raspberry ya arduino ki devices lagi
+        hui hai so sabhi devices ke alag alag ip honge par port hum same hi rkhenge 6000. actual me humare pass 50 devices hai to backened me 50 services run hongi computer me aur har ek service ek server ya client ki tarah se kaam karega.
+        hum man lo ki humara arduino ek server hai jiski ip 192.168.1.151 and port 6000 hai. maine ek python ka code likha socket library ka use krke jisse ki tcp ip connection banta hai ye humare arduino se connect ho jayega aur qr data 
+        ko receive karega aur database ke sath compare krega aur agar data match ho jayega to ye arduino ko |OPENEN% ki command send kar dega aur humara relay trigger ho jayega. 
+        so agar hume 50 devices ko connect karna hai to hume 50 services banani hongi jo client ki tarah kaam karegi aur har ek arduino server ke liye ek client script run hoga jo apne apne client server se connect honge aur data send ya receive krenge. isme multiple client server wala kuch bhi kaam nahi hota hai
+        ye project humara fastag me amritsar aur udaipur me aur kota me raspberry pi me run ho rha hai
+
+#Note- iska use hum kewal wahi pass krte hai jaha hum webpage ke sath interact nahi karte hai. jaha kewal data send karke database ke sath match krke relay ko trigger karana hota hai. lekin man lo ki agar hume apne data ko
+       webpage jaise php and react ke sath share karna hai means man lo mai chahta hu ki arduino se jo mai data send karu temperature aur humidity ka wo php receive kare aur database me store kar de yaa data ko receive kare database ke sath match kare aur phir arduino ko command send kar de 
+       iske liye hum http post aur get method ka use karte hai
+
+#step-2 http protocol get and post.(like mullanpur stadium project)
+        is project me hum 
+        
+
+
+
+
+
+
+
+
+
+
+
+
