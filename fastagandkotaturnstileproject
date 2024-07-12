@@ -904,3 +904,179 @@ void loop()
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# abhi tk jo bhi upar me humne code dekha hai usme arduino jo hai wo server ki tarah kaam karta hai. isme ek problem ye bhi hai ki connection toot jata hai to is problem ke solution ke liye hum resistor lgate hai
+  ethernet shield wale module me. lekin agar hum apne arduino ko as a client banaye aur python script ko as a server banaye to hum dekhenge ki humara connection nahi tootta hai.
+
+#include <SPI.h>
+#include <Ethernet.h>
+
+// Network settings
+byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
+IPAddress server(192, 168, 1, 2); // Replace with your server's IP
+int port = 12345; // Replace with your server's port
+
+// QR Scanner
+#define QRScannerSerial Serial1
+
+EthernetClient client;
+unsigned long previousMillis = 0;
+const long interval = 3000; // Interval to send heartbeat (3 seconds)
+
+void setup() {
+  Serial.begin(9600);
+  QRScannerSerial.begin(9600);
+  Ethernet.begin(mac);
+  
+  // Check for Ethernet hardware
+  if (Ethernet.hardwareStatus() == EthernetNoHardware) {
+    Serial.println("Ethernet shield was not found.");
+    while (true) {
+      delay(1); // do nothing, no point running without Ethernet hardware
+    }
+  }
+  
+  // Attempt to connect to server
+  if (client.connect(server, port)) {
+    Serial.println("Connected to server");
+  } else {
+    Serial.println("Connection to server failed");
+  }
+}
+
+void loop() {
+  unsigned long currentMillis = millis();
+  
+  // Send heartbeat every 3 seconds if connected
+  if (client.connected()) {
+    if (currentMillis - previousMillis >= interval) {
+      previousMillis = currentMillis;
+      client.println("|HLT%");
+    }
+  } else {
+    Serial.println("Disconnected from server. Trying to reconnect...");
+    if (client.connect(server, port)) {
+      Serial.println("Reconnected to server");
+    } else {
+      Serial.println("Reconnection failed");
+      delay(5000); // Wait before retrying
+    }
+  }
+  
+  // Check for QR scanner data
+  if (QRScannerSerial.available()) {
+    String qrData = QRScannerSerial.readStringUntil('\n');
+    qrData.trim();
+    Serial.println("QR Data: " + qrData);
+    
+    if (client.connected()) {
+      client.println(qrData);
+    }
+  }
+  
+  // Read server response
+  if (client.available()) {
+    String serverResponse = client.readStringUntil('\n');
+    serverResponse.trim();
+    Serial.println("Server Response: " + serverResponse);
+    
+    if (serverResponse == "|OPENEN%") {
+      triggerRelay();
+    }
+  }
+}
+
+void triggerRelay() {
+  // Add your relay triggering code here
+  Serial.println("Relay triggered");
+}
+
+#python code as a server
+import socket
+import mysql.connector
+
+# Database connection setup
+db = mysql.connector.connect(
+    host="your_database_host",
+    user="your_database_user",
+    password="your_database_password",
+    database="your_database_name"
+)
+
+cursor = db.cursor()
+
+# Server setup
+server_ip = '192.168.1.2'  # Replace with your server's IP
+server_port = 12345  # Replace with your desired port
+
+server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server_socket.bind((server_ip, server_port))
+server_socket.listen(5)
+
+print(f"Server listening on {server_ip}:{server_port}")
+
+while True:
+    client_socket, client_address = server_socket.accept()
+    print(f"Connection from {client_address} has been established.")
+
+    while True:
+        try:
+            data = client_socket.recv(1024).decode().strip()
+            if data:
+                print(f"Received Data: {data}")
+
+                if data == "|HLT%":
+                    client_socket.sendall(b"connected\n")
+                else:
+                    # Check QR data in the database
+                    query = "SELECT * FROM your_table WHERE qr_data = %s"
+                    cursor.execute(query, (data,))
+                    result = cursor.fetchone()
+
+                    if result:
+                        print("QR Data matched with the database. Sending command to open.")
+                        client_socket.sendall(b"|OPENEN%\n")
+                    else:
+                        print("QR Data did not match.")
+            else:
+                break
+        except Exception as e:
+            print(f"Error: {e}")
+            break
+
+    client_socket.close()
+
+
+
+
+
